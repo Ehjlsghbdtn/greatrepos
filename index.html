@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basketball Throw Game with Restart</title>
+    <style>
+        canvas {
+            background-color: #e0e0e0;
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #000;
+        }
+
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+
+        #restartButton {
+            display: none;
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Basketball Throw Game</h1>
+    <p>Score: <span id="score">0</span></p>
+    <p>Time Left: <span id="timer">10</span> seconds</p>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <button id="restartButton">Restart Game</button>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+        const timerElement = document.getElementById("timer");
+        const restartButton = document.getElementById("restartButton");
+
+        // Настройки игры
+        const gravity = 0.5;
+        const ball = {
+            x: 100,
+            y: 300,
+            radius: 15,
+            color: "orange",
+            vx: 0,
+            vy: 0,
+            isDragging: false,
+            initialX: 100,
+            initialY: 300
+        };
+        const basket = {
+            x: 500,
+            y: 100,
+            outerRadius: 30,
+            innerRadius: 20,
+            color: "red"
+        };
+        let startDragPos = { x: 0, y: 0 };
+        let isTrajectoryVisible = false;
+        let score = 0;
+        let timeLeft = 10;
+        let gameEnded = false;
+        let timerInterval;
+
+        // Таймер
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (timeLeft > 0 && !gameEnded) {
+                    timeLeft--;
+                    timerElement.textContent = timeLeft;
+                } else {
+                    clearInterval(timerInterval);
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        // Отрисовка корзины как кольца
+        function drawBasket() {
+            ctx.beginPath();
+            ctx.arc(basket.x, basket.y, basket.outerRadius, 0, Math.PI * 2);
+            ctx.fillStyle = basket.color;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(basket.x, basket.y, basket.innerRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "white";
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // Перемещение корзины в случайное место
+        function moveBasket() {
+            basket.x = Math.random() * (canvas.width - basket.outerRadius * 2) + basket.outerRadius;
+            basket.y = Math.random() * (canvas.height / 2 - basket.outerRadius * 2) + basket.outerRadius;
+        }
+
+        // Отрисовка мяча
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // Отрисовка траектории
+        function drawTrajectory() {
+            if (isTrajectoryVisible) {
+                const dx = startDragPos.x - ball.x;
+                const dy = startDragPos.y - ball.y;
+                const predictionVx = dx * 0.1;
+                const predictionVy = dy * 0.1;
+
+                let tempX = ball.x;
+                let tempY = ball.y;
+                let tempVx = predictionVx;
+                let tempVy = predictionVy;
+
+                ctx.beginPath();
+                ctx.moveTo(tempX, tempY);
+                ctx.strokeStyle = "blue";
+                ctx.lineWidth = 2;
+
+                for (let i = 0; i < 50; i++) {
+                    tempVy += gravity;
+                    tempX += tempVx;
+                    tempY += tempVy;
+
+                    if (tempY + ball.radius > canvas.height) {
+                        tempY = canvas.height - ball.radius;
+                        tempVy *= -0.7;
+                    }
+
+                    ctx.lineTo(tempX, tempY);
+                }
+                ctx.stroke();
+            }
+        }
+
+        // Перезагрузка мяча в начальную позицию
+        function resetBall() {
+            ball.x = ball.initialX;
+            ball.y = ball.initialY;
+            ball.vx = 0;
+            ball.vy = 0;
+        }
+
+        // Проверка попадания мяча в кольцо
+        function checkBasketScore() {
+            const dx = ball.x - basket.x;
+            const dy = ball.y - basket.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            return distance < basket.outerRadius && distance > basket.innerRadius;
+        }
+
+        // Завершение игры
+        function endGame() {
+            gameEnded = true;
+            clearInterval(timerInterval);
+            alert(`Game Over! Your final score is ${score}`);
+            restartButton.style.display = "block";
+        }
+
+        // Перезапуск игры
+        function restartGame() {
+            score = 0;
+            timeLeft = 10;
+            gameEnded = false;
+            scoreElement.textContent = score;
+            timerElement.textContent = timeLeft;
+            restartButton.style.display = "none";
+            resetBall();
+            moveBasket();
+            startTimer();
+            gameLoop();
+        }
+
+        // Основной игровой цикл
+        function gameLoop() {
+            if (gameEnded) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!ball.isDragging) {
+                ball.vy += gravity;
+                ball.x += ball.vx;
+                ball.y += ball.vy;
+            }
+
+            // Обработка столкновения с полом
+            if (ball.y + ball.radius > canvas.height) {
+                ball.y = canvas.height - ball.radius;
+                ball.vy *= -0.7;
+                ball.vx *= 0.7;
+            }
+
+            // Отскок от краев экрана
+            if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
+                ball.vx *= -1;
+            }
+
+            // Проверка на попадание в кольцо
+            if (checkBasketScore()) {
+                score++;
+                scoreElement.textContent = score;
+                timeLeft += 1; // Добавляем 1 секунду к таймеру
+                timerElement.textContent = timeLeft;
+                moveBasket(); // Перемещаем кольцо в новое место
+                resetBall();
+            }
+
+            drawBasket();
+            drawBall();
+            drawTrajectory();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Управление броском
+        canvas.addEventListener("mousedown", (e) => {
+            const dx = e.offsetX - ball.x;
+            const dy = e.offsetY - ball.y;
+            if (Math.sqrt(dx * dx + dy * dy) < ball.radius) {
+                ball.isDragging = true;
+                startDragPos.x = e.offsetX;
+                startDragPos.y = e.offsetY;
+                isTrajectoryVisible = true;
+            }
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            if (ball.isDragging) {
+                startDragPos.x = e.offsetX;
+                startDragPos.y = e.offsetY;
+            }
+        });
+
+        canvas.addEventListener("mouseup", (e) => {
+            if (ball.isDragging) {
+                ball.isDragging = false;
+                isTrajectoryVisible = false;
+
+                const dx = startDragPos.x - ball.x;
+                const dy = startDragPos.y - ball.y;
+                ball.vx = dx * 0.1;
+                ball.vy = dy * 0.1;
+            }
+        });
+
+        // Обработчик кнопки рестарта
+        restartButton.addEventListener("click", restartGame);
+
+        // Запуск игры
+        startTimer();
+        gameLoop();
+    </script>
+</body>
+</html>
