@@ -1,14 +1,23 @@
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+<canvas id="gameCanvas"></canvas>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-let ball = { x: 400, y: 500, radius: 20, speedX: 0, speedY: 0 };
-let hoop = { x: Math.random() * 600 + 100, y: 100, width: 100, height: 10 };
-let isDragging = false;
-let touchStart = null;
+
+// Адаптируем размеры под экран устройства
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Настройки мяча и кольца
+let ball = { x: canvas.width / 2, y: canvas.height - 60, radius: 20, speedX: 0, speedY: 0, isInMotion: false };
+let hoop = { x: Math.random() * (canvas.width - 100), y: 100, width: 80, height: 10 };
 let score = 0;
 let timeLeft = 10;
-let throwStrength = 0;
+let isDragging = false;
+let throwStart = null;
 
 function drawBall() {
     ctx.beginPath();
@@ -30,30 +39,46 @@ function drawHoop() {
 function drawScoreAndTime() {
     ctx.font = '20px Arial';
     ctx.fillText(`Score: ${score}`, 20, 30);
-    ctx.fillText(`Time: ${timeLeft}`, 700, 30);
+    ctx.fillText(`Time: ${Math.floor(timeLeft)}`, canvas.width - 100, 30);
 }
 
 function updateBallPosition() {
-    ball.x += ball.speedX;
-    ball.y += ball.speedY;
-    ball.speedY += 0.5; // Гравитация
+    if (ball.isInMotion) {
+        ball.x += ball.speedX;
+        ball.y += ball.speedY;
+        ball.speedY += 0.5; // Гравитация
 
-    // Отскок от краев экрана
-    if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.speedX *= -1;
-    if (ball.y < ball.radius || ball.y > canvas.height - ball.radius) ball.speedY *= -1;
+        // Проверка на отскок от стенок
+        if (ball.x <= ball.radius || ball.x >= canvas.width - ball.radius) {
+            ball.speedX *= -0.8; // теряем немного энергии при каждом ударе
+        }
+        if (ball.y >= canvas.height - ball.radius) {
+            ball.speedY *= -0.8;
+            ball.y = canvas.height - ball.radius; // ограничение по нижнему краю
+            if (Math.abs(ball.speedY) < 1) ball.isInMotion = false; // остановка мяча, если скорость мала
+        }
 
-    // Попадание в кольцо
-    if (
-        ball.x > hoop.x &&
-        ball.x < hoop.x + hoop.width &&
-        ball.y > hoop.y &&
-        ball.y < hoop.y + hoop.height
-    ) {
-        score++;
-        timeLeft += 1;
-        ball = { x: 400, y: 500, radius: 20, speedX: 0, speedY: 0 };
-        hoop.x = Math.random() * 600 + 100;
+        // Проверка на попадание в кольцо
+        if (
+            ball.x > hoop.x &&
+            ball.x < hoop.x + hoop.width &&
+            ball.y > hoop.y - ball.radius &&
+            ball.y < hoop.y + hoop.height
+        ) {
+            score++;
+            timeLeft += 1;
+            resetBall();
+            hoop.x = Math.random() * (canvas.width - hoop.width); // случайное расположение кольца
+        }
     }
+}
+
+function resetBall() {
+    ball.x = canvas.width / 2;
+    ball.y = canvas.height - 60;
+    ball.speedX = 0;
+    ball.speedY = 0;
+    ball.isInMotion = false;
 }
 
 function updateTime() {
@@ -65,6 +90,7 @@ function endGame() {
     alert(`Game over! Final score: ${score}`);
     score = 0;
     timeLeft = 10;
+    resetBall();
 }
 
 function gameLoop() {
@@ -77,57 +103,57 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Добавляем поддержку touch событий
-canvas.addEventListener('mousedown', (e) => {
-    if (Math.hypot(e.offsetX - ball.x, e.offsetY - ball.y) < ball.radius) {
+// Добавляем поддержку как для мыши, так и для touch-событий
+function startThrow(x, y) {
+    if (Math.hypot(x - ball.x, y - ball.y) < ball.radius) {
         isDragging = true;
-        touchStart = { x: e.offsetX, y: e.offsetY };
+        throwStart = { x, y };
     }
-});
+}
 
-canvas.addEventListener('mousemove', (e) => {
+function moveThrow(x, y) {
     if (isDragging) {
-        drawTrajectory(e.offsetX, e.offsetY);
+        drawTrajectory(x, y);
     }
-});
+}
 
-canvas.addEventListener('mouseup', (e) => {
-    if (isDragging) {
-        throwBall(e.offsetX, e.offsetY);
+function endThrow(x, y) {
+    if (isDragging && throwStart) {
+        ball.speedX = (x - throwStart.x) * 0.1;
+        ball.speedY = (y - throwStart.y) * 0.1;
+        ball.isInMotion = true;
         isDragging = false;
+        throwStart = null;
     }
-});
+}
 
-// Поддержка touch-устройств
+canvas.addEventListener('mousedown', (e) => startThrow(e.offsetX, e.offsetY));
+canvas.addEventListener('mousemove', (e) => moveThrow(e.offsetX, e.offsetY));
+canvas.addEventListener('mouseup', (e) => endThrow(e.offsetX, e.offsetY));
+
+// Поддержка touch-событий
 canvas.addEventListener('touchstart', (e) => {
     const touch = e.touches[0];
     const touchX = touch.clientX - canvas.offsetLeft;
     const touchY = touch.clientY - canvas.offsetTop;
-    if (Math.hypot(touchX - ball.x, touchY - ball.y) < ball.radius) {
-        isDragging = true;
-        touchStart = { x: touchX, y: touchY };
-    }
+    startThrow(touchX, touchY);
 });
 
 canvas.addEventListener('touchmove', (e) => {
-    if (isDragging) {
-        const touch = e.touches[0];
-        const touchX = touch.clientX - canvas.offsetLeft;
-        const touchY = touch.clientY - canvas.offsetTop;
-        drawTrajectory(touchX, touchY);
-    }
+    const touch = e.touches[0];
+    const touchX = touch.clientX - canvas.offsetLeft;
+    const touchY = touch.clientY - canvas.offsetTop;
+    moveThrow(touchX, touchY);
 });
 
 canvas.addEventListener('touchend', (e) => {
-    if (isDragging && touchStart) {
-        const touch = e.changedTouches[0];
-        const touchX = touch.clientX - canvas.offsetLeft;
-        const touchY = touch.clientY - canvas.offsetTop;
-        throwBall(touchX, touchY);
-        isDragging = false;
-    }
+    const touch = e.changedTouches[0];
+    const touchX = touch.clientX - canvas.offsetLeft;
+    const touchY = touch.clientY - canvas.offsetTop;
+    endThrow(touchX, touchY);
 });
 
+// Рисуем траекторию броска
 function drawTrajectory(currentX, currentY) {
     ctx.beginPath();
     ctx.moveTo(ball.x, ball.y);
@@ -136,11 +162,6 @@ function drawTrajectory(currentX, currentY) {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.closePath();
-}
-
-function throwBall(releaseX, releaseY) {
-    ball.speedX = (releaseX - touchStart.x) * 0.1;
-    ball.speedY = (releaseY - touchStart.y) * 0.1;
 }
 
 gameLoop();
