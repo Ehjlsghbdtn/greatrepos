@@ -1,174 +1,211 @@
 <canvas id="gameCanvas"></canvas>
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
 
-// Адаптируем размеры под экран устройства
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+    // Адаптируем размеры под экран устройства
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
-// Настройки мяча и кольца
-let ball = { x: canvas.width / 2, y: canvas.height - 60, radius: 20, speedX: 0, speedY: 0, isInMotion: false };
-let hoop = { x: Math.random() * (canvas.width - 100), y: 100, radiusX: 50, radiusY: 20 };
-let score = 0;
-let timeLeft = 30;  // Устанавливаем начальное время на 30 секунд
-let isDragging = false;
-let throwStart = null;
-let currentTrajectory = null;  // Данные для траектории
+    // Настройки мяча и кольца
+    let ball = { x: canvas.width / 2, y: canvas.height - 80, radius: 20, speedX: 0, speedY: 0, isInMotion: false };
+    let hoop = { x: Math.random() * (canvas.width - 100), y: 200, radiusX: 50, radiusY: 20 }; // Опустили кольцо ниже
+    let score = 0;
+    let timeLeft = 30; // Устанавливаем начальное время на 30 секунд
+    let isDragging = false;
+    let throwStart = null;
+    let throwVelocity = { x: 0, y: 0 }; // Вектор броска
+    const maxThrowForce = 40; // Увеличиваем максимальную силу броска
 
-function drawBall() {
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#FF4500';
-    ctx.fill();
-    ctx.closePath();
-}
+    function drawBall() {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#FF4500';
+        ctx.fill();
+        ctx.closePath();
+    }
 
-function drawHoop() {
-    ctx.beginPath();
-    ctx.ellipse(hoop.x, hoop.y, hoop.radiusX, hoop.radiusY, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.closePath();
-}
+    function drawHoop() {
+        ctx.beginPath();
+        ctx.ellipse(hoop.x, hoop.y, hoop.radiusX, hoop.radiusY, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.closePath();
+    }
 
-function drawScoreAndTime() {
-    ctx.font = '20px Arial';
-    ctx.fillText(`Score: ${score}`, 20, 30);
-    ctx.fillText(`Time: ${Math.floor(timeLeft)}`, canvas.width - 100, 30);
-}
+    function drawFloor() {
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height - 40); // Высота пола
+        ctx.lineTo(canvas.width, canvas.height - 40);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.closePath();
+    }
 
-function updateBallPosition() {
-    if (ball.isInMotion) {
-        ball.x += ball.speedX;
-        ball.y += ball.speedY;
-        ball.speedY += 0.5; // Гравитация
+    function drawScoreAndTime() {
+        ctx.font = '20px Arial';
+        ctx.fillText(`Score: ${score}`, 20, 30);
+        ctx.fillText(`Time: ${Math.floor(timeLeft)}`, canvas.width - 100, 30);
+    }
 
-        // Проверка на отскок от стенок
-        if (ball.x <= ball.radius || ball.x >= canvas.width - ball.radius) {
-            ball.speedX *= -0.8; // теряем немного энергии при каждом ударе
+    function updateBallPosition() {
+        if (ball.isInMotion) {
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+            ball.speedY += 0.5; // Гравитация
+
+            // Проверка на отскок от стенок
+            if (ball.x <= ball.radius || ball.x >= canvas.width - ball.radius) {
+                ball.speedX *= -0.8; // теряем немного энергии при каждом ударе
+            }
+            if (ball.y >= canvas.height - ball.radius - 40) { // Проверка на пол
+                ball.speedY *= -0.8;
+                ball.y = canvas.height - ball.radius - 40; // ограничение по нижнему краю
+                if (Math.abs(ball.speedY) < 1) ball.isInMotion = false; // остановка мяча, если скорость мала
+            }
+
+            // Проверка на попадание в кольцо
+            if (
+                ball.x > hoop.x - hoop.radiusX &&
+                ball.x < hoop.x + hoop.radiusX &&
+                ball.y > hoop.y - hoop.radiusY &&
+                ball.y < hoop.y + hoop.radiusY
+            ) {
+                score++;
+                timeLeft += 1;
+                resetBall();
+                hoop.x = Math.random() * (canvas.width - hoop.radiusX * 2) + hoop.radiusX; // случайное расположение кольца
+            }
         }
-        if (ball.y >= canvas.height - ball.radius) {
-            ball.speedY *= -0.8;
-            ball.y = canvas.height - ball.radius; // ограничение по нижнему краю
-            if (Math.abs(ball.speedY) < 1) ball.isInMotion = false; // остановка мяча, если скорость мала
+    }
+
+    function resetBall() {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height - 80; // Подняли мяч выше
+        ball.speedX = 0;
+        ball.speedY = 0;
+        ball.isInMotion = false;
+        throwVelocity = { x: 0, y: 0 };
+    }
+
+    function updateTime() {
+        if (timeLeft > 0) timeLeft -= 0.02;
+        else endGame();
+    }
+
+    function endGame() {
+        alert(`Game over! Final score: ${score}`);
+        score = 0;
+        timeLeft = 30;
+        resetBall();
+    }
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBall();
+        drawHoop();
+        drawFloor(); // Рисуем пол
+        drawScoreAndTime();
+        if (isDragging) drawTrajectory(); // Отрисовка траектории при перетаскивании
+        updateBallPosition();
+        updateTime();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Добавляем поддержку как для мыши, так и для touch-событий
+    function startThrow(x, y) {
+        if (Math.hypot(x - ball.x, y - ball.y) < ball.radius) {
+            isDragging = true;
+            throwStart = { x, y };
+        }
+    }
+
+    function moveThrow(x, y) {
+        if (isDragging) {
+            throwVelocity.x = (x - throwStart.x) * 0.15; // Увеличили коэффициент для большей отзывчивости
+            throwVelocity.y = (y - throwStart.y) * 0.15;
+
+            // Ограничиваем скорость броска
+            const speed = Math.sqrt(throwVelocity.x ** 2 + throwVelocity.y ** 2);
+            if (speed > maxThrowForce) {
+                const scale = maxThrowForce / speed;
+                throwVelocity.x *= scale;
+                throwVelocity.y *= scale;
+            }
+        }
+    }
+
+    function endThrow(x, y) {
+        if (isDragging) {
+            ball.speedX = throwVelocity.x;
+            ball.speedY = throwVelocity.y;
+            ball.isInMotion = true;
+            isDragging = false;
+            throwStart = null;
+            throwVelocity = { x: 0, y: 0 };
+        }
+    }
+
+    canvas.addEventListener('mousedown', (e) => startThrow(e.offsetX, e.offsetY));
+    canvas.addEventListener('mousemove', (e) => moveThrow(e.offsetX, e.offsetY));
+    canvas.addEventListener('mouseup', (e) => endThrow(e.offsetX, e.offsetY));
+
+    // Поддержка touch-событий
+    canvas.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        const touchX = touch.clientX - canvas.offsetLeft;
+        const touchY = touch.clientY - canvas.offsetTop;
+        startThrow(touchX, touchY);
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        const touch = e.touches[0];
+        const touchX = touch.clientX - canvas.offsetLeft;
+        const touchY = touch.clientY - canvas.offsetTop;
+        moveThrow(touchX, touchY);
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+        const touch = e.changedTouches[0];
+        const touchX = touch.clientX - canvas.offsetLeft;
+        const touchY = touch.clientY - canvas.offsetTop;
+        endThrow(touchX, touchY);
+    });
+
+    // Функция для рисования траектории
+    function drawTrajectory() {
+        ctx.setLineDash([5, 5]); // Устанавливаем пунктирную линию
+        ctx.beginPath();
+        const trajectorySteps = 100; // Количество шагов для рисования траектории
+        const timeStep = 0.1; // Шаг времени
+        let tempBall = { ...ball };
+
+        for (let i = 0; i <= trajectorySteps; i++) {
+            const t = i * timeStep;
+            tempBall.x = ball.x + throwVelocity.x * t;
+            tempBall.y = ball.y + throwVelocity.y * t + 0.5 * 0.5 * t * t; // Уравнение движения с учетом гравитации
+
+            // Если мяч попадает на пол, мы можем добавить отскок
+            if (tempBall.y + tempBall.radius >= canvas.height - 40) {
+                tempBall.speedY *= -0.8; // Отскок
+                tempBall.y = canvas.height - tempBall.radius - 40; // Установка на пол
+            }
+
+            ctx.lineTo(tempBall.x, tempBall.y);
         }
 
-        // Проверка на попадание в кольцо
-        if (
-            ball.x > hoop.x - hoop.radiusX &&
-            ball.x < hoop.x + hoop.radiusX &&
-            ball.y > hoop.y - hoop.radiusY &&
-            ball.y < hoop.y + hoop.radiusY
-        ) {
-            score++;
-            timeLeft += 1;
-            resetBall();
-            hoop.x = Math.random() * (canvas.width - hoop.radiusX * 2) + hoop.radiusX; // случайное расположение кольца
-        }
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.closePath();
+        ctx.setLineDash([]); // Сбрасываем пунктир для других элементов
     }
-}
 
-function resetBall() {
-    ball.x = canvas.width / 2;
-    ball.y = canvas.height - 60;
-    ball.speedX = 0;
-    ball.speedY = 0;
-    ball.isInMotion = false;
-    currentTrajectory = null;
-}
-
-function updateTime() {
-    if (timeLeft > 0) timeLeft -= 0.02;
-    else endGame();
-}
-
-function endGame() {
-    alert(`Game over! Final score: ${score}`);
-    score = 0;
-    timeLeft = 30;
-    resetBall();
-}
-
-function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBall();
-    drawHoop();
-    drawScoreAndTime();
-    if (currentTrajectory) drawTrajectory(currentTrajectory.x, currentTrajectory.y);  // Отрисовка траектории
-    updateBallPosition();
-    updateTime();
-    requestAnimationFrame(gameLoop);
-}
-
-// Добавляем поддержку как для мыши, так и для touch-событий
-function startThrow(x, y) {
-    if (Math.hypot(x - ball.x, y - ball.y) < ball.radius) {
-        isDragging = true;
-        throwStart = { x, y };
-    }
-}
-
-function moveThrow(x, y) {
-    if (isDragging) {
-        currentTrajectory = { x, y };
-    }
-}
-
-function endThrow(x, y) {
-    if (isDragging && throwStart) {
-        ball.speedX = (x - throwStart.x) * 0.1;
-        ball.speedY = (y - throwStart.y) * 0.1;
-        ball.isInMotion = true;
-        isDragging = false;
-        throwStart = null;
-        currentTrajectory = null;
-    }
-}
-
-canvas.addEventListener('mousedown', (e) => startThrow(e.offsetX, e.offsetY));
-canvas.addEventListener('mousemove', (e) => moveThrow(e.offsetX, e.offsetY));
-canvas.addEventListener('mouseup', (e) => endThrow(e.offsetX, e.offsetY));
-
-// Поддержка touch-событий
-canvas.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    const touchX = touch.clientX - canvas.offsetLeft;
-    const touchY = touch.clientY - canvas.offsetTop;
-    startThrow(touchX, touchY);
-});
-
-canvas.addEventListener('touchmove', (e) => {
-    const touch = e.touches[0];
-    const touchX = touch.clientX - canvas.offsetLeft;
-    const touchY = touch.clientY - canvas.offsetTop;
-    moveThrow(touchX, touchY);
-});
-
-canvas.addEventListener('touchend', (e) => {
-    const touch = e.changedTouches[0];
-    const touchX = touch.clientX - canvas.offsetLeft;
-    const touchY = touch.clientY - canvas.offsetTop;
-    endThrow(touchX, touchY);
-});
-
-// Рисуем черную пунктирную траекторию броска
-function drawTrajectory(currentX, currentY) {
-    ctx.setLineDash([5, 5]); // Устанавливаем пунктирную линию
-    ctx.beginPath();
-    ctx.moveTo(ball.x, ball.y);
-    ctx.lineTo(currentX, currentY);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.setLineDash([]); // Сбрасываем пунктир для других элементов
-    ctx.closePath();
-}
-
-gameLoop();
+    gameLoop();
 </script>
