@@ -13,7 +13,7 @@ window.addEventListener('resize', resizeCanvas);
 
 // Настройки мяча и кольца
 let ball = { x: canvas.width / 2, y: canvas.height - 60, radius: 20, speedX: 0, speedY: 0, isInMotion: false };
-let hoop = { x: Math.random() * (canvas.width - 100), y: 100, width: 80, height: 10 };
+let hoop = { x: Math.random() * (canvas.width - 100), y: 100, radiusX: 50, radiusY: 20 };
 let score = 0;
 let timeLeft = 10;
 let isDragging = false;
@@ -29,9 +29,9 @@ function drawBall() {
 
 function drawHoop() {
     ctx.beginPath();
-    ctx.rect(hoop.x, hoop.y, hoop.width, hoop.height);
+    ctx.ellipse(hoop.x, hoop.y, hoop.radiusX, hoop.radiusY, 0, 0, Math.PI * 2);
     ctx.strokeStyle = 'black';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 4;
     ctx.stroke();
     ctx.closePath();
 }
@@ -60,15 +60,15 @@ function updateBallPosition() {
 
         // Проверка на попадание в кольцо
         if (
-            ball.x > hoop.x &&
-            ball.x < hoop.x + hoop.width &&
-            ball.y > hoop.y - ball.radius &&
-            ball.y < hoop.y + hoop.height
+            ball.x > hoop.x - hoop.radiusX &&
+            ball.x < hoop.x + hoop.radiusX &&
+            ball.y > hoop.y - hoop.radiusY &&
+            ball.y < hoop.y + hoop.radiusY
         ) {
             score++;
             timeLeft += 1;
             resetBall();
-            hoop.x = Math.random() * (canvas.width - hoop.width); // случайное расположение кольца
+            hoop.x = Math.random() * (canvas.width - hoop.radiusX * 2) + hoop.radiusX; // случайное расположение кольца
         }
     }
 }
@@ -153,14 +153,16 @@ canvas.addEventListener('touchend', (e) => {
     endThrow(touchX, touchY);
 });
 
-// Рисуем траекторию броска
+// Рисуем пунктирную траекторию броска
 function drawTrajectory(currentX, currentY) {
+    ctx.setLineDash([5, 5]); // Устанавливаем пунктирную линию
     ctx.beginPath();
     ctx.moveTo(ball.x, ball.y);
     ctx.lineTo(currentX, currentY);
     ctx.strokeStyle = 'blue';
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.setLineDash([]); // Сбрасываем пунктир для других элементов
     ctx.closePath();
 }
 
