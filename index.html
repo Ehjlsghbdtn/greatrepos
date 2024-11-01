@@ -15,9 +15,10 @@ window.addEventListener('resize', resizeCanvas);
 let ball = { x: canvas.width / 2, y: canvas.height - 60, radius: 20, speedX: 0, speedY: 0, isInMotion: false };
 let hoop = { x: Math.random() * (canvas.width - 100), y: 100, radiusX: 50, radiusY: 20 };
 let score = 0;
-let timeLeft = 10;
+let timeLeft = 30;  // Устанавливаем начальное время на 30 секунд
 let isDragging = false;
 let throwStart = null;
+let currentTrajectory = null;  // Данные для траектории
 
 function drawBall() {
     ctx.beginPath();
@@ -79,6 +80,7 @@ function resetBall() {
     ball.speedX = 0;
     ball.speedY = 0;
     ball.isInMotion = false;
+    currentTrajectory = null;
 }
 
 function updateTime() {
@@ -98,6 +100,7 @@ function gameLoop() {
     drawBall();
     drawHoop();
     drawScoreAndTime();
+    if (currentTrajectory) drawTrajectory(currentTrajectory.x, currentTrajectory.y);  // Отрисовка траектории
     updateBallPosition();
     updateTime();
     requestAnimationFrame(gameLoop);
@@ -113,7 +116,7 @@ function startThrow(x, y) {
 
 function moveThrow(x, y) {
     if (isDragging) {
-        drawTrajectory(x, y);
+        currentTrajectory = { x, y };
     }
 }
 
@@ -124,6 +127,7 @@ function endThrow(x, y) {
         ball.isInMotion = true;
         isDragging = false;
         throwStart = null;
+        currentTrajectory = null;
     }
 }
 
