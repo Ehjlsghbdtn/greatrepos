@@ -5,12 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Меткий Бросок</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; }
-        canvas { background: #87CEEB; }
+        body, html { margin: 0; padding: 0; overflow: hidden; font-family: Arial, sans-serif; background-color: #f5f5f5; }
+        #gameCanvas { background-color: #87CEEB; display: block; }
+        .ui {
+            position: absolute; top: 10px; left: 10px; color: #333; font-size: 20px;
+        }
     </style>
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
+
+<div class="ui">
+    <p id="score">Счёт: 0</p>
+    <p id="timer">Время: 60</p>
+    <p id="lives">Жизни: 3</p>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon-es/0.18.0/cannon-es.min.js"></script>
@@ -20,58 +29,95 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Настройки мяча и корзины
+    let score = 0;
+    let timer = 60; // Таймер в секундах
+    let lives = 3;
+
+    // Инициализация мяча
     let ball = { x: canvas.width / 2, y: canvas.height - 50, radius: 15, color: 'orange', vx: 0, vy: 0 };
-    const gravity = 0.5; // Гравитация для эффекта падения мяча
+    const gravity = 0.5;
 
+    // Инициализация корзины
     let basket = { x: canvas.width / 2 - 30, y: 50, width: 60, height: 10, color: 'brown' };
-    
-    let isThrowing = false; // Флаг броска
-    
-    canvas.addEventListener('touchstart', startThrow);
-    canvas.addEventListener('touchend', endThrow);
 
-    // Начало свайпа
-    function startThrow(event) {
+    let isThrowing = false;
+    let throwStart = null;
+
+    // Обновление интерфейса
+    const updateUI = () => {
+        document.getElementById('score').textContent = `Счёт: ${score}`;
+        document.getElementById('timer').textContent = `Время: ${timer}`;
+        document.getElementById('lives').textContent = `Жизни: ${lives}`;
+    };
+
+    const startThrow = (event) => {
         const touch = event.touches[0];
         ball.x = touch.clientX;
         ball.y = touch.clientY;
         isThrowing = true;
-    }
+        throwStart = { x: ball.x, y: ball.y };
+    };
 
-    // Конец свайпа и вычисление скорости мяча
-    function endThrow(event) {
+    const endThrow = (event) => {
         if (!isThrowing) return;
         const touch = event.changedTouches[0];
-        ball.vx = (touch.clientX - ball.x) * 0.1;
-        ball.vy = (touch.clientY - ball.y) * 0.1;
+        ball.vx = (touch.clientX - throwStart.x) * 0.2;
+        ball.vy = (touch.clientY - throwStart.y) * 0.2;
         isThrowing = false;
-    }
+    };
 
-    function update() {
-        // Обновление позиции мяча
+    const updateBall = () => {
         if (!isThrowing) {
             ball.vy += gravity;
             ball.x += ball.vx;
             ball.y += ball.vy;
 
-            // Отскок мяча при ударе о нижнюю границу экрана
+            // Столкновение с нижней границей
             if (ball.y + ball.radius > canvas.height) {
                 ball.vy *= -0.7;
                 ball.y = canvas.height - ball.radius;
+                loseLife();
             }
 
             // Проверка попадания в корзину
             if (ball.x > basket.x && ball.x < basket.x + basket.width &&
                 ball.y > basket.y && ball.y < basket.y + basket.height) {
-                alert('Попадание!');
+                score += 10;
                 resetBall();
+                updateUI();
             }
         }
-    }
+    };
 
-    function draw() {
+    const resetBall = () => {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height - 50;
+        ball.vx = 0;
+        ball.vy = 0;
+    };
+
+    const loseLife = () => {
+        lives--;
+        if (lives <= 0) {
+            alert("Игра окончена! Ваш счёт: " + score);
+            resetGame();
+        } else {
+            resetBall();
+        }
+        updateUI();
+    };
+
+    const resetGame = () => {
+        score = 0;
+        lives = 3;
+        timer = 60;
+        resetBall();
+        updateUI();
+    };
+
+    const gameLoop = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        updateBall();
 
         // Рисуем корзину
         ctx.fillStyle = basket.color;
@@ -83,22 +129,26 @@
         ctx.fillStyle = ball.color;
         ctx.fill();
         ctx.closePath();
-    }
 
-    function resetBall() {
-        ball.x = canvas.width / 2;
-        ball.y = canvas.height - 50;
-        ball.vx = 0;
-        ball.vy = 0;
-    }
-
-    function gameLoop() {
-        update();
-        draw();
         requestAnimationFrame(gameLoop);
-    }
+    };
 
+    const startTimer = () => {
+        const interval = setInterval(() => {
+            timer--;
+            updateUI();
+            if (timer <= 0 || lives <= 0) {
+                clearInterval(interval);
+                alert("Время вышло! Ваш счёт: " + score);
+                resetGame();
+            }
+        }, 1000);
+    };
+
+    canvas.addEventListener('touchstart', startThrow);
+    canvas.addEventListener('touchend', endThrow);
     gameLoop();
+    startTimer();
 </script>
 </body>
 </html>
