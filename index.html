@@ -164,7 +164,7 @@
                 ball.quaternion.copy(ballBody.quaternion);
 
                 if (ball.position.y < 0) {
-                    resetBall();
+                    resetBall(); // Сбрасываем мяч при падении
                 }
 
                 if (checkScore()) {
@@ -186,6 +186,7 @@
             ballBody.angularVelocity.set(0, 0, 0);
             ballBody.type = CANNON.Body.STATIC;
             isBallStatic = true; // Позволяем взаимодействие снова
+            ball.position.copy(initialBallPosition); // Обновляем позицию мяча в сцене
         }
 
         function updateScoreDisplay() {
@@ -222,7 +223,7 @@
 
                 if (intersects.length > 0) {
                     const forceDirection = new CANNON.Vec3(mouse.x * 5, mouse.y * 5, 0); // Уменьшить множитель, если нужно
-                    const force = forceDirection.multiplyScalar(50); // Уменьшение силы броска
+                    const force = forceDirection.multiplyScalar(25); // Уменьшение силы броска
 
                     ballBody.applyForce(force, ballBody.position);
                     ballBody.type = CANNON.Body.DYNAMIC; // Позволяем мячу двигаться
