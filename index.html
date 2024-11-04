@@ -7,17 +7,9 @@
     <style>
         body { margin: 0; }
         canvas { display: block; }
-        #scoreboard {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 24px;
-        }
     </style>
 </head>
 <body>
-    <div id="scoreboard">Очки: 0</div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
     <script>
@@ -25,8 +17,9 @@
         let ball, wall, floor, hoop, backboard;
         let ballBody, floorBody, wallBody, hoopBodies = [];
         const initialBallPosition = new CANNON.Vec3(0, 1.5, 0);
-        let score = 0;
-        let isBallStatic = true;
+        let isBallStatic = true; // Переменная для отслеживания состояния мяча
+        let score = 0; // Счет
+        const scoreDisplay = document.createElement('div'); // Элемент для отображения счета
 
         function init() {
             scene = new THREE.Scene();
@@ -34,6 +27,14 @@
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
+
+            // Создаем элемент для отображения счета
+            scoreDisplay.style.position = 'absolute';
+            scoreDisplay.style.top = '10px';
+            scoreDisplay.style.left = '10px';
+            scoreDisplay.style.color = 'white';
+            scoreDisplay.style.fontSize = '20px';
+            document.body.appendChild(scoreDisplay);
 
             world = new CANNON.World();
             world.gravity.set(0, -9.82, 0);
@@ -60,9 +61,11 @@
             floor.position.set(0, 0.42, 0);
             scene.add(floor);
 
+            const floorMaterialPhysics = new CANNON.Material("floorMaterial");
             floorBody = new CANNON.Body({
                 position: new CANNON.Vec3(0, 0.42, 0),
-                mass: 0
+                mass: 0,
+                material: floorMaterialPhysics
             });
             const floorShape = new CANNON.Box(new CANNON.Vec3(5, 0.2, 5));
             floorBody.addShape(floorShape);
@@ -76,9 +79,11 @@
             wall.position.set(0, 3, -7);
             scene.add(wall);
 
+            const wallMaterialPhysics = new CANNON.Material("wallMaterial");
             wallBody = new CANNON.Body({
                 position: new CANNON.Vec3(0, 3, -7),
-                mass: 0
+                mass: 0,
+                material: wallMaterialPhysics
             });
             const wallShape = new CANNON.Box(new CANNON.Vec3(10, 6, 0.1));
             wallBody.addShape(wallShape);
@@ -92,9 +97,11 @@
             ball.position.copy(initialBallPosition);
             scene.add(ball);
 
+            const ballMaterialPhysics = new CANNON.Material("ballMaterial");
             ballBody = new CANNON.Body({
                 mass: 0.17,
-                position: initialBallPosition.clone()
+                position: initialBallPosition.clone(),
+                material: ballMaterialPhysics
             });
             const ballShape = new CANNON.Sphere(0.2);
             ballBody.addShape(ballShape);
@@ -160,8 +167,13 @@
                     resetBall();
                 }
 
-                if (!isBallStatic) {
-                    checkScore();
+                if (checkScore()) {
+                    score += 2; // Увеличиваем счет на 2 за попадание
+                    updateScoreDisplay(); // Обновляем отображение счета
+                    ballBody.type = CANNON.Body.STATIC; // Делаем мяч статичным после попадания
+                    setTimeout(() => {
+                        resetBall(); // Возвращаем мяч через 2 секунды
+                    }, 2000);
                 }
             }
 
@@ -173,24 +185,28 @@
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
             ballBody.type = CANNON.Body.STATIC;
-            isBallStatic = true;
+            isBallStatic = true; // Позволяем взаимодействие снова
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplay.innerHTML = `Счет: ${score}`;
         }
 
         function checkScore() {
-            const ballPosition = ballBody.position;
-            const ringPosition = hoopBodies.map(h => h.position);
+            // Проверяем, попал ли мяч в кольцо
+            const ballRadius = 0.2;
+            const hoopY = 2.75;
+            const hoopXRange = [0.35, -0.35]; // Диапазон по оси X для кольца
+            const hoopZ = -6.5;
 
-            if (ballPosition.x > ringPosition[0].x - 0.35 && ballPosition.x < ringPosition[1].x + 0.35 &&
-                ballPosition.y > ringPosition[0].y - 0.05 && ballPosition.y < ringPosition[0].y + 0.05 &&
-                ballPosition.z < ringPosition[0].z + 0.1 && ballPosition.z > ringPosition[1].z - 0.1) {
-                score += 2;
-                document.getElementById('scoreboard').innerText = "Очки: " + score
-                resetBall();
-                setTimeout(() => {
-                    ballBody.type = CANNON.Body.DYNAMIC; // Разрешаем взаимодействие снова
-                    isBallStatic = false;
-                }, 2000); // Задержка перед тем, как мяч снова можно будет бросить
-            }
+            return (
+                ball.position.y >= hoopY - ballRadius && // Мяч выше кольца
+                ball.position.y <= hoopY + ballRadius && // Мяч ниже кольца
+                ball.position.z >= hoopZ - ballRadius && // Мяч внутри кольца по Z
+                ball.position.z <= hoopZ + ballRadius && // Мяч внутри кольца по Z
+                ball.position.x >= hoopXRange[1] && // Мяч справа от кольца
+                ball.position.x <= hoopXRange[0] // Мяч слева от кольца
+            );
         }
 
         window.addEventListener('touchstart', function (event) {
@@ -206,7 +222,7 @@
 
                 if (intersects.length > 0) {
                     const forceDirection = new CANNON.Vec3(mouse.x * 5, mouse.y * 5, 0); // Уменьшить множитель, если нужно
-                    const force = forceDirection.multiplyScalar(25); // Уменьшение силы броска
+                    const force = forceDirection.multiplyScalar(50); // Уменьшение силы броска
 
                     ballBody.applyForce(force, ballBody.position);
                     ballBody.type = CANNON.Body.DYNAMIC; // Позволяем мячу двигаться
