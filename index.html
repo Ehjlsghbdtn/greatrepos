@@ -163,7 +163,7 @@
             hoopBodies.push(rightRingBody);
         }
 
-        function animate() {
+                function animate() {
             requestAnimationFrame(animate);
             world.step(1 / 60);
 
@@ -171,11 +171,18 @@
                 ball.position.copy(ballBody.position);
                 ball.quaternion.copy(ballBody.quaternion);
 
+                // Check if the ball has fallen below the floor
                 if (ball.position.y < 0) {
                     resetBall();
                 }
 
-                checkScore();
+                // Check if the ball went through the hoop
+                if (ballBody.position.z > -6.5 && ballBody.position.z < -6.3 && ballBody.position.y < 2.75) {
+                    score += 2; // Increment score for successful shot
+                    document.getElementById('scoreboard').innerText = "Очки: " + score;
+                    // Delay reset to show ball passing through the hoop
+                    setTimeout(resetBall, 1000);
+                }
             }
 
             renderer.render(scene, camera);
@@ -185,9 +192,9 @@
             ballBody.position.copy(initialBallPosition);
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
-            ballBody.type = CANNON.Body.STATIC;
+            ballBody.type = CANNON.Body.STATIC; // Reset ball to static state until the next throw
+            ballBody.sleep(); // Put the ball to sleep to avoid unnecessary calculations
         }
-
         function checkScore() {
             const ballPosition = ballBody.position;
             const hoopPosition = hoop.position;
