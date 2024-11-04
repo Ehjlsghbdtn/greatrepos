@@ -7,7 +7,13 @@
     <style>
         body { margin: 0; }
         canvas { display: block; }
-        #scoreboard { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; }
+        #scoreboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+        }
     </style>
 </head>
 <body>
@@ -19,10 +25,8 @@
         let ball, wall, floor, hoop, backboard;
         let ballBody, floorBody, wallBody, hoopBodies = [];
         const initialBallPosition = new CANNON.Vec3(0, 1.5, 0);
-        let canInteract = true; // Flag to control interaction
-        let score = 0; // Score variable
-        let timer = 30; // Timer for the game
-        let timerInterval; // Timer interval reference
+        let score = 0;
+        let isBallStatic = true;
 
         function init() {
             scene = new THREE.Scene();
@@ -46,7 +50,6 @@
             createBackboardAndHoop();
 
             camera.position.set(0, 2, 5);
-            startTimer();
             animate();
         }
 
@@ -57,11 +60,9 @@
             floor.position.set(0, 0.42, 0);
             scene.add(floor);
 
-            const floorMaterialPhysics = new CANNON.Material("floorMaterial");
             floorBody = new CANNON.Body({
                 position: new CANNON.Vec3(0, 0.42, 0),
-                mass: 0,
-                material: floorMaterialPhysics
+                mass: 0
             });
             const floorShape = new CANNON.Box(new CANNON.Vec3(5, 0.2, 5));
             floorBody.addShape(floorShape);
@@ -75,11 +76,9 @@
             wall.position.set(0, 3, -7);
             scene.add(wall);
 
-            const wallMaterialPhysics = new CANNON.Material("wallMaterial");
             wallBody = new CANNON.Body({
                 position: new CANNON.Vec3(0, 3, -7),
-                mass: 0,
-                material: wallMaterialPhysics
+                mass: 0
             });
             const wallShape = new CANNON.Box(new CANNON.Vec3(10, 6, 0.1));
             wallBody.addShape(wallShape);
@@ -93,11 +92,9 @@
             ball.position.copy(initialBallPosition);
             scene.add(ball);
 
-            const ballMaterialPhysics = new CANNON.Material("ballMaterial");
             ballBody = new CANNON.Body({
                 mass: 0.17,
-                position: initialBallPosition.clone(),
-                material: ballMaterialPhysics
+                position: initialBallPosition.clone()
             });
             const ballShape = new CANNON.Sphere(0.2);
             ballBody.addShape(ballShape);
@@ -163,11 +160,8 @@
                     resetBall();
                 }
 
-                if (ballBody.position.z > -6.5 && ballBody.position.z < -6.3 && ballBody.position.y < 2.75) {
-                    score += 2; // Increment score for successful shot
-                    document.getElementById('scoreboard').innerText = "Очки: " + score;
-                    // Delay reset to show ball passing through the hoop
-                    setTimeout(resetBall, 1000);
+                if (!isBallStatic) {
+                    checkScore();
                 }
             }
 
@@ -178,50 +172,48 @@
             ballBody.position.copy(initialBallPosition);
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
-            ballBody.type = CANNON.Body.STATIC; // Reset ball to static state until the next throw
-            ballBody.sleep(); // Put the ball to sleep to avoid unnecessary calculations
-            canInteract = true; // Allow interaction again
+            ballBody.type = CANNON.Body.STATIC;
+            isBallStatic = true;
         }
 
-        window.addEventListener('click', function (event) {
-            if (!ballBody || !canInteract) return; // Exit if ball is not available or interaction is blocked
+        function checkScore() {
+            const ballPosition = ballBody.position;
+            const ringPosition = hoopBodies.map(h => h.position);
 
-            if (ballBody.type === CANNON.Body.STATIC) {
-                ballBody.type = CANNON.Body.DYNAMIC;
-                canInteract = false; // Block further interaction until the ball resets
+            if (ballPosition.x > ringPosition[0].x - 0.35 && ballPosition.x < ringPosition[1].x + 0.35 &&
+                ballPosition.y > ringPosition[0].y - 0.05 && ballPosition.y < ringPosition[0].y + 0.05 &&
+                ballPosition.z < ringPosition[0].z + 0.1 && ballPosition.z > ringPosition[1].z - 0.1) {
+                score += 2;
+                document.getElementById('scoreboard').innerText = "Очки: " + score
+                resetBall();
+                setTimeout(() => {
+                    ballBody.type = CANNON.Body.DYNAMIC; // Разрешаем взаимодействие снова
+                    isBallStatic = false;
+                }, 2000); // Задержка перед тем, как мяч снова можно будет бросить
             }
+        }
 
-            const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-            const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
-            const vector = new THREE.Vector3(mouseX, mouseY, 0.5);
-            vector.unproject(camera);
-            const dir = vector.sub(camera.position).normalize();
+        window.addEventListener('touchstart', function (event) {
+            if (isBallStatic) {
+                const touch = event.touches[0];
+                const mouse = new THREE.Vector2();
+                mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
 
-            // Define force based on direction and a constant power
-            const power = 10; // Adjust power as needed
-            ballBody.applyImpulse(new CANNON.Vec3(dir.x * power, dir.y * power, 0), ballBody.position);
-        });
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(ball);
 
-        function startTimer() {
-            timerInterval = setInterval(() => {
-                timer--;
-                if (timer <= 0) {
-                    clearInterval(timerInterval);
-                    endGame();
+                if (intersects.length > 0) {
+                    const forceDirection = new CANNON.Vec3(mouse.x * 5, mouse.y * 5, 0); // Уменьшить множитель, если нужно
+                    const force = forceDirection.multiplyScalar(25); // Уменьшение силы броска
+
+                    ballBody.applyForce(force, ballBody.position);
+                    ballBody.type = CANNON.Body.DYNAMIC; // Позволяем мячу двигаться
+                    isBallStatic = false; // Блокируем дальнейшее взаимодействие
                 }
-            }, 1000);
-        }
-
-        function endGame() {
-            canInteract = false; // Disable interaction at the end of the game
-            alert("Игра окончена! Ваш счет: " + score);
-            // Reset score and timer for the next game
-            score = 0;
-            timer = 30;
-            document.getElementById('scoreboard').innerText = "Очки: " + score;
-            resetBall();
-            startTimer();
-        }
+            }
+        });
 
         window.addEventListener('resize', function () {
             camera.aspect = window.innerWidth / window.innerHeight;
