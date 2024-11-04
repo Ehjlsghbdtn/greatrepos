@@ -1,154 +1,265 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Меткий Бросок</title>
+    <title>Бросок баскетбольного мяча</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; font-family: Arial, sans-serif; background-color: #f5f5f5; }
-        #gameCanvas { background-color: #87CEEB; display: block; }
-        .ui {
-            position: absolute; top: 10px; left: 10px; color: #333; font-size: 20px;
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #scoreboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+        }
+        #timer {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 24px;
         }
     </style>
 </head>
 <body>
-<canvas id="gameCanvas"></canvas>
+    <div id="scoreboard">Очки: 0</div>
+    <div id="timer">Время: 30</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script>
+        let scene, camera, renderer, world;
+        let ball, wall, floor, hoop, backboard;
+        let ballBody, floorBody, wallBody, hoopBodies = [];
+        const initialBallPosition = new CANNON.Vec3(0, 1.5, 0);
+        let score = 0;
+        let timer = 30;
+        let gameActive = true;
 
-<div class="ui">
-    <p id="score">Счёт: 0</p>
-    <p id="timer">Время: 60</p>
-    <p id="lives">Жизни: 3</p>
-</div>
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon-es/0.18.0/cannon-es.min.js"></script>
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+            world = new CANNON.World();
+            world.gravity.set(0, -9.82, 0);
 
-    let score = 0;
-    let timer = 60; // Таймер в секундах
-    let lives = 3;
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5).normalize();
+            scene.add(directionalLight);
 
-    // Инициализация мяча
-    let ball = { x: canvas.width / 2, y: canvas.height - 50, radius: 15, color: 'orange', vx: 0, vy: 0 };
-    const gravity = 0.5;
+            createFloor();
+            createBall();
+            createWall();
+            createBackboardAndHoop();
 
-    // Инициализация корзины
-    let basket = { x: canvas.width / 2 - 30, y: 50, width: 60, height: 10, color: 'brown' };
+            camera.position.set(0, 2, 5);
+            animate();
+            startTimer();
+        }
 
-    let isThrowing = false;
-    let throwStart = null;
+        function createFloor() {
+            const floorGeometry = new THREE.BoxGeometry(7.5, 0.2, 7.5);
+            const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.position.set(0, 0.42, 0);
+            scene.add(floor);
 
-    // Обновление интерфейса
-    const updateUI = () => {
-        document.getElementById('score').textContent = `Счёт: ${score}`;
-        document.getElementById('timer').textContent = `Время: ${timer}`;
-        document.getElementById('lives').textContent = `Жизни: ${lives}`;
-    };
+            const floorMaterialPhysics = new CANNON.Material("floorMaterial");
+            floorBody = new CANNON.Body({
+                position: new CANNON.Vec3(0, 0.42, 0),
+                mass: 0,
+                material: floorMaterialPhysics
+            });
+            const floorShape = new CANNON.Box(new CANNON.Vec3(5, 0.2, 5));
+            floorBody.addShape(floorShape);
+            world.addBody(floorBody);
+        }
 
-    const startThrow = (event) => {
-        const touch = event.touches[0];
-        ball.x = touch.clientX;
-        ball.y = touch.clientY;
-        isThrowing = true;
-        throwStart = { x: ball.x, y: ball.y };
-    };
+        function createWall() {
+            const wallGeometry = new THREE.BoxGeometry(10, 6, 0.1);
+            const wallMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
+            wall = new THREE.Mesh(wallGeometry, wallMaterial);
+            wall.position.set(0, 3, -7);
+            scene.add(wall);
 
-    const endThrow = (event) => {
-        if (!isThrowing) return;
-        const touch = event.changedTouches[0];
-        ball.vx = (touch.clientX - throwStart.x) * 0.2;
-        ball.vy = (touch.clientY - throwStart.y) * 0.2;
-        isThrowing = false;
-    };
+            const wallMaterialPhysics = new CANNON.Material("wallMaterial");
+            wallBody = new CANNON.Body({
+                position: new CANNON.Vec3(0, 3, -7),
+                mass: 0,
+                material: wallMaterialPhysics
+            });
+            const wallShape = new CANNON.Box(new CANNON.Vec3(10, 6, 0.1));
+            wallBody.addShape(wallShape);
+            world.addBody(wallBody);
+        }
 
-    const updateBall = () => {
-        if (!isThrowing) {
-            ball.vy += gravity;
-            ball.x += ball.vx;
-            ball.y += ball.vy;
+        function createBall() {
+            const ballGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+            const ballMaterial = new THREE.MeshPhongMaterial({ color: 0xffa500 });
+            ball = new THREE.Mesh(ballGeometry, ballMaterial);
+            ball.position.copy(initialBallPosition);
+            scene.add(ball);
 
-            // Столкновение с нижней границей
-            if (ball.y + ball.radius > canvas.height) {
-                ball.vy *= -0.7;
-                ball.y = canvas.height - ball.radius;
-                loseLife();
+            const ballMaterialPhysics = new CANNON.Material("ballMaterial");
+            ballBody = new CANNON.Body({
+                mass: 0.17,
+                position: initialBallPosition.clone(),
+                material: ballMaterialPhysics
+            });
+            const ballShape = new CANNON.Sphere(0.2);
+            ballBody.addShape(ballShape);
+            world.addBody(ballBody);
+        }
+
+        function createBackboardAndHoop() {
+            const backboardGeometry = new THREE.BoxGeometry(1.8, 1, 0.1);
+            const backboardMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            backboard = new THREE.Mesh(backboardGeometry, backboardMaterial);
+            backboard.position.set(0, 3, -6.8);
+            scene.add(backboard);
+
+            const backboardBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(0, 3, -6.8)
+            });
+            const backboardShape = new CANNON.Box(new CANNON.Vec3(0.9, 0.5, 0.05));
+            backboardBody.addShape(backboardShape);
+            world.addBody(backboardBody);
+
+            const hoopGeometry = new THREE.TorusGeometry(0.35, 0.05, 16, 100);
+            const hoopMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            hoop = new THREE.Mesh(hoopGeometry, hoopMaterial);
+            hoop.position.set(0, 2.75, -6.5);
+            hoop.rotation.x = Math.PI / 2;
+            scene.add(hoop);
+
+            const hoopMaterialPhysics = new CANNON.Material("hoopMaterial");
+            const leftRingBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(-0.35, 2.75, -6.5),
+                material: hoopMaterialPhysics
+            });
+            const leftRingShape = new CANNON.Box(new CANNON.Vec3(0.02, 0.02, 0.35));
+            leftRingBody.addShape(leftRingShape);
+            leftRingBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+            world.addBody(leftRingBody);
+            hoopBodies.push(leftRingBody);
+
+            const rightRingBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(0.35, 2.75, -6.5),
+                material: hoopMaterialPhysics
+            });
+            const rightRingShape = new CANNON.Box(new CANNON.Vec3(0.02, 0.02, 0.35));
+            rightRingBody.addShape(rightRingShape);
+            rightRingBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+            world.addBody(rightRingBody);
+            hoopBodies.push(rightRingBody);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            world.step(1 / 60);
+
+            if (ballBody) {
+                ball.position.copy(ballBody.position);
+                ball.quaternion.copy(ballBody.quaternion);
+
+                if (ball.position.y < 0) {
+                    resetBall();
+                }
+
+                checkScore();
             }
 
-            // Проверка попадания в корзину
-            if (ball.x > basket.x && ball.x < basket.x + basket.width &&
-                ball.y > basket.y && ball.y < basket.y + basket.height) {
-                score += 10;
+            renderer.render(scene, camera);
+        }
+
+        function resetBall() {
+            ballBody.position.copy(initialBallPosition);
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+            ballBody.type = CANNON.Body.STATIC;
+        }
+
+        function checkScore() {
+            const ballPosition = ballBody.position;
+            const hoopPosition = hoop.position;
+
+            if (ballPosition.x > hoopPosition.x - 0.35 && ballPosition.x < hoopPosition.x + 0.35 &&
+                ballPosition.y > hoopPosition.y - 0.05 && ballPosition.y < hoopPosition.y + 0.05 &&
+                ballPosition.z < hoopPosition.z + 0.1 && ballPosition.z > hoopPosition.z - 0.1) {
+                score += 2;
+                document.getElementById('scoreboard').innerText = "Очки: " + score;
                 resetBall();
-                updateUI();
+                timer += 3;
             }
         }
-    };
 
-    const resetBall = () => {
-        ball.x = canvas.width / 2;
-        ball.y = canvas.height - 50;
-        ball.vx = 0;
-        ball.vy = 0;
-    };
+        function startTimer() {
+            setInterval(() => {
+                if (gameActive && timer > 0) {
+                    timer--;
+                    document.getElementById('timer').innerText = "Время: " + timer;
+                }
+                if (timer <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
 
-    const loseLife = () => {
-        lives--;
-        if (lives <= 0) {
-            alert("Игра окончена! Ваш счёт: " + score);
+        function endGame() {
+            gameActive = false;
+            alert("Игра окончена! Ваш финальный счёт: " + score);
             resetGame();
-        } else {
-            resetBall();
         }
-        updateUI();
-    };
 
-    const resetGame = () => {
-        score = 0;
-        lives = 3;
-        timer = 60;
-        resetBall();
-        updateUI();
-    };
+        function resetGame() {
+            score = 0;
+            timer = 30;
+            document.getElementById('scoreboard').innerText = "Очки: 0";
+            document.getElementById('timer').innerText = "Время: 30";
+            resetBall();
+            gameActive = true;
+            startTimer();
+        }
 
-    const gameLoop = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        updateBall();
-
-        // Рисуем корзину
-        ctx.fillStyle = basket.color;
-        ctx.fillRect(basket.x, basket.y, basket.width, basket.height);
-
-        // Рисуем мяч
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-        ctx.fillStyle = ball.color;
-        ctx.fill();
-        ctx.closePath();
-
-        requestAnimationFrame(gameLoop);
-    };
-
-    const startTimer = () => {
-        const interval = setInterval(() => {
-            timer--;
-            updateUI();
-            if (timer <= 0 || lives <= 0) {
-                clearInterval(interval);
-                alert("Время вышло! Ваш счёт: " + score);
-                resetGame();
+        function touchStart(event) {
+            if (gameActive) {
+                event.preventDefault(); // Prevent scrolling
+                const touch = event.touches[0];
+                const x = (touch.clientX / window.innerWidth) * 2 - 1;
+                const y = -(touch.clientY / window.innerHeight) * 2 + 1;
+                throwBall(x, y);
             }
-        }, 1000);
-    };
+        }
 
-    canvas.addEventListener('touchstart', startThrow);
-    canvas.addEventListener('touchend', endThrow);
-    gameLoop();
-    startTimer();
-</script>
+        function throwBall(x, y) {
+            const forceMagnitude = 10; // Adjust this value to change throw strength
+            const force = new CANNON.Vec3(x * forceMagnitude, 5, -5);
+            ballBody.position.copy(initialBallPosition);
+            ballBody.velocity.set(0, 0, 0); // Reset velocity before applying force
+            ballBody.applyImpulse(force, ballBody.position);
+            ballBody.type = CANNON.Body.DYNAMIC; // Make the ball dynamic after applying force
+        }
+
+        // Event listeners for touch controls
+        window.addEventListener('touchstart', touchStart, false);
+        window.addEventListener('resize', onWindowResize, false);
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
 </body>
 </html>
