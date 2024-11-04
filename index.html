@@ -223,7 +223,7 @@
 
                 if (intersects.length > 0) {
                     const forceDirection = new CANNON.Vec3(mouse.x * 5, mouse.y * 5, 0); // Уменьшить множитель, если нужно
-                    const force = forceDirection.multiplyScalar(25); // Уменьшение силы броска
+                    const force = forceDirection.multiplyScalar(55); // Уменьшение силы броска
 
                     ballBody.applyForce(force, ballBody.position);
                     ballBody.type = CANNON.Body.DYNAMIC; // Позволяем мячу двигаться
