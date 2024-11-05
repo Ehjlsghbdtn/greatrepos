@@ -9,11 +9,12 @@
         canvas { display: block; }
         #score-display {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 5px;
+            right: 10px;
             color: white;
             font-size: 24px;
             font-family: Arial, sans-serif;
+            text-shadow: 1px 1px 2px black;
         }
     </style>
 </head>
@@ -27,7 +28,8 @@
         let ballBody, floorBody, wallBody, hoopBodies = [];
         const initialBallPosition = new CANNON.Vec3(0, 1.5, 0);
         let score = 0;
-        let canInteract = true;
+        let canInteract = false;
+        let scored = false;
 
         function init() {
             scene = new THREE.Scene();
@@ -101,17 +103,49 @@
             ballBody = new CANNON.Body({
                 mass: 0.17,
                 position: initialBallPosition.clone(),
-                material: ballMaterialPhysics
+                material: ballMaterialPhysics,
+                type: CANNON.Body.STATIC
             });
             const ballShape = new CANNON.Sphere(0.2);
             ballBody.addShape(ballShape);
             world.addBody(ballBody);
         }
 
-        function createBackboardAndHoop() {
-            // Создаем щит и кольцо (как и раньше)
-        }
+            function createBackboardAndHoop() {
+            const backboardGeometry = new THREE.BoxGeometry(1.8, 1, 0.1);
+            const backboardMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            backboard = new THREE.Mesh(backboardGeometry, backboardMaterial);
+            backboard.position.set(0, 3, -6.8);
+            scene.add(backboard);
 
+            const backboardBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(0, 3, -6.8)
+            });
+            const backboardShape = new CANNON.Box(new CANNON.Vec3(0.9, 0.5, 0.05));
+            backboardBody.addShape(backboardShape);
+            world.addBody(backboardBody);
+
+            const hoopGeometry = new THREE.TorusGeometry(0.35, 0.05, 16, 100);
+            const hoopMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            hoop = new THREE.Mesh(hoopGeometry, hoopMaterial);
+            hoop.position.set(0, 2.75, -6.5);
+            hoop.rotation.x = Math.PI / 2;
+            scene.add(hoop);
+
+            const hoopMaterialPhysics = new CANNON.Material("hoopMaterial");
+
+            const leftRingBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(-0.35, 2.75, -6.5),
+                material: hoopMaterialPhysics
+            });
+            const leftRingShape = new CANNON.Box(new CANNON.Vec3(0.02, 0.02, 0.35));
+            leftRingBody.addShape(leftRingShape);
+            leftRingBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+            world.addBody(leftRingBody);
+            hoopBodies.push(leftRingBody);
+        }
         function updateScore() {
             document.getElementById('score-display').innerText = `Счёт: ${score}`;
         }
@@ -124,7 +158,7 @@
                 ball.position.copy(ballBody.position);
                 ball.quaternion.copy(ballBody.quaternion);
 
-                if (ball.position.y < 0) {
+                if (ball.position.y < 0 && !scored) {
                     resetBall();
                 }
             }
@@ -138,15 +172,22 @@
             ballBody.angularVelocity.set(0, 0, 0);
             ballBody.type = CANNON.Body.STATIC;
             canInteract = true; // Разблокировать взаимодействие после сброса
+            scored = false;
         }
 
-        // Обработчик для броска с мышью
-        window.addEventListener('mouseup', function (event) {
-            if (!canInteract || !ballBody) return;
+        function handleScore() {
+            score += 2;
+            updateScore();
+            if (navigator.vibrate) navigator.vibrate(200); // Вибрация при попадании
+            scored = true;
+            setTimeout(resetBall, 1000); // Задержка в 1 секунду перед сбросом
+        }
 
-            if (ballBody.type === CANNON.Body.STATIC) {
-                ballBody.type = CANNON.Body.DYNAMIC;
-            }
+        // Обработчик для броска мышью
+        window.addEventListener('mouseup', function (event) {
+            if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
+
+            ballBody.type = CANNON.Body.DYNAMIC;
 
             const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
             const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -156,7 +197,7 @@
             const direction = vector.sub(camera.position).normalize();
             direction.y += 0.5;
 
-            const force = direction.multiplyScalar(70);
+            const force = direction.multiplyScalar(55);
             ballBody.applyForce(force, ballBody.position);
 
             canInteract = false; // Блокировка взаимодействия после броска
@@ -165,11 +206,9 @@
 
         // Обработчик для сенсорного экрана (бросок по окончанию касания)
         window.addEventListener('touchend', function (event) {
-            if (!canInteract || !ballBody) return;
+            if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
 
-            if (ballBody.type === CANNON.Body.STATIC) {
-                ballBody.type = CANNON.Body.DYNAMIC;
-            }
+            ballBody.type = CANNON.Body.DYNAMIC;
 
             const touch = event.changedTouches[0];
             const touchX = (touch.clientX / window.innerWidth) * 2 - 1;
