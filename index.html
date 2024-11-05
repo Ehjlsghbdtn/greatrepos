@@ -108,7 +108,7 @@ scoreDisplay.innerText = "Score: " + score; // Первоначальное зн
 
             const ballMaterialPhysics = new CANNON.Material("ballMaterial");
             ballBody = new CANNON.Body({
-                mass: 0.17,
+                mass: 0.20,
                 position: initialBallPosition.clone(),
                 material: ballMaterialPhysics,
                 type: CANNON.Body.STATIC
