@@ -19,7 +19,6 @@
     </style>
 </head>
 <body>
-    <div id="score-display">Счёт: 0</div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
     <script>
@@ -27,9 +26,17 @@
         let ball, wall, floor, hoop, backboard;
         let ballBody, floorBody, wallBody, hoopBodies = [];
         const initialBallPosition = new CANNON.Vec3(0, 1.5, 0);
-        let score = 0;
-        let canInteract = false;
+        let canInteract = true;
         let scored = false;
+		let hasScored = false; // Флаг для отслеживания попадания
+		let score = 0; // Инициализация счёта
+        const scoreDisplay = document.createElement('div'); // Создание элемента для отображения счёта
+scoreDisplay.style.position = 'absolute';
+scoreDisplay.style.top = '10px';
+scoreDisplay.style.right = '10px';
+scoreDisplay.style.color = 'white';
+document.body.appendChild(scoreDisplay);
+scoreDisplay.innerText = "Score: " + score; // Первоначальное значение счёта
 
         function init() {
             scene = new THREE.Scene();
@@ -39,7 +46,7 @@
             document.body.appendChild(renderer.domElement);
 
             world = new CANNON.World();
-            world.gravity.set(0, -6.82, 0);
+            world.gravity.set(0, -4.82, 0);
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
@@ -146,6 +153,15 @@
             world.addBody(leftRingBody);
             hoopBodies.push(leftRingBody);
         }
+		function checkScore() {
+    if (!hasScored && ball.position.z > -6.5 && ball.position.z < -6.4 && 
+        ball.position.y > 2.75 && ball.position.y < 3.0) {
+        score += 2; // Увеличиваем счёт на 2
+        scoreDisplay.innerText = "Score: " + score; // Обновляем отображение счёта
+        hasScored = true; // Устанавливаем флаг, что попадание произошло
+        setTimeout(resetBall, 1000); // Рестарт через 1 секунду после попадания
+    }
+}
         function updateScore() {
             document.getElementById('score-display').innerText = `Счёт: ${score}`;
         }
@@ -157,7 +173,9 @@
             if (ballBody) {
                 ball.position.copy(ballBody.position);
                 ball.quaternion.copy(ballBody.quaternion);
-
+				
+            checkScore(); // Проверяем попадание в кольцо
+			
                 if (ball.position.y < 0 && !scored) {
                     resetBall();
                 }
@@ -167,13 +185,13 @@
         }
 
         function resetBall() {
-            ballBody.position.copy(initialBallPosition);
-            ballBody.velocity.set(0, 0, 0);
-            ballBody.angularVelocity.set(0, 0, 0);
-            ballBody.type = CANNON.Body.STATIC;
-            canInteract = true; // Разблокировать взаимодействие после сброса
-            scored = false;
-        }
+    ballBody.position.copy(initialBallPosition);
+    ballBody.velocity.set(0, 0, 0);
+    ballBody.angularVelocity.set(0, 0, 0);
+    ballBody.type = CANNON.Body.STATIC;
+    hasScored = false; // Сбрасываем флаг попадания
+    canInteract = true; // Позволяем взаимодействие с мячом
+}
 
         function handleScore() {
             score += 2;
@@ -182,55 +200,50 @@
             scored = true;
             setTimeout(resetBall, 1000); // Задержка в 1 секунду перед сбросом
         }
+		
 
         // Обработчик для броска мышью
-        window.addEventListener('mouseup', function (event) {
-            if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
+    window.addEventListener('mouseup', function (event) {
+    if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
 
-            ballBody.type = CANNON.Body.DYNAMIC;
+    ballBody.type = CANNON.Body.DYNAMIC; // Убедитесь, что мяч становится динамичным
 
-            const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-            const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
-            const vector = new THREE.Vector3(mouseX, mouseY, 0.5);
-            vector.unproject(camera);
+    const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+    const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+    const vector = new THREE.Vector3(mouseX, mouseY, 0.5);
+    vector.unproject(camera);
 
-            const direction = vector.sub(camera.position).normalize();
-            direction.y += 0.5;
+    const direction = vector.sub(camera.position).normalize();
+    direction.y += 0.5;
 
-            const force = direction.multiplyScalar(55);
-            ballBody.applyForce(force, ballBody.position);
+    const force = direction.multiplyScalar(50);
+    ballBody.applyForce(force, ballBody.position);
 
-            canInteract = false; // Блокировка взаимодействия после броска
-            event.preventDefault();
-        });
+    canInteract = false; // Блокировка взаимодействия после броска
+    event.preventDefault();
+});
 
-        // Обработчик для сенсорного экрана (бросок по окончанию касания)
-        window.addEventListener('touchend', function (event) {
-            if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
+// Обработчик для сенсорного экрана
+window.addEventListener('touchend', function (event) {
+    if (!canInteract || !ballBody || ballBody.type !== CANNON.Body.STATIC) return;
 
-            ballBody.type = CANNON.Body.DYNAMIC;
+    ballBody.type = CANNON.Body.DYNAMIC; // Убедитесь, что мяч становится динамичным
 
-            const touch = event.changedTouches[0];
-            const touchX = (touch.clientX / window.innerWidth) * 2 - 1;
-            const touchY = -(touch.clientY / window.innerHeight) * 2 + 1;
-            const vector = new THREE.Vector3(touchX, touchY, 0.5);
-            vector.unproject(camera);
+    const touch = event.changedTouches[0];
+    const touchX = (touch.clientX / window.innerWidth) * 2 - 1;
+    const touchY = -(touch.clientY / window.innerHeight) * 2 + 1;
+    const vector = new THREE.Vector3(touchX, touchY, 0.5);
+    vector.unproject(camera);
 
-            const direction = vector.sub(camera.position).normalize();
-            direction.y += 0.5;
+    const direction = vector.sub(camera.position).normalize();
+    direction.y += 0.5;
 
-            const force = direction.multiplyScalar(50);
-            ballBody.applyForce(force, ballBody.position);
+    const force = direction.multiplyScalar(105);
+    ballBody.applyForce(force, ballBody.position);
 
-            canInteract = false; // Блокировка взаимодействия после броска
-            event.preventDefault();
-        });
-
-        window.addEventListener('resize', function () {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+    canInteract = false; // Блокировка взаимодействия после броска
+    event.preventDefault();
+});
 
         init();
     </script>
